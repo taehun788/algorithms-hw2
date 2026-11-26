@@ -5,6 +5,7 @@ from urllib.parse import parse_qsl, quote, urlsplit
 
 from .hash_table import HashTable, horner
 from .shortener import Shortener
+from .probing_table import ProbingTable
 
 CSS = """
 *{box-sizing:border-box}body{max-width:1000px;margin:auto;padding:36px 22px;color:#192f2a;background:#fafbf8;font:16px/1.55 system-ui,sans-serif}
@@ -112,10 +113,11 @@ def build_server(address, factory=HashTable, probing=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--table", choices=("chain",), default="chain")
+    parser.add_argument("--table", choices=("chain", "probe"), default="chain")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    with build_server(("0.0.0.0", args.port)) as server:
+    probing = args.table == "probe"
+    with build_server(("0.0.0.0", args.port), ProbingTable if probing else HashTable, probing) as server:
         print(f"Serving at http://localhost:{args.port} ({args.table})", flush=True)
         server.serve_forever()
 

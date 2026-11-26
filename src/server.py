@@ -5,6 +5,7 @@ from urllib.parse import parse_qsl, quote, urlsplit
 
 from .hash_table import HashTable, horner
 from .shortener import Shortener
+from .probing_table import ProbingTable
 
 CSS = """
 *{box-sizing:border-box}body{max-width:1000px;margin:auto;padding:36px 22px;color:#192f2a;background:#fafbf8;font:16px/1.55 system-ui,sans-serif}
@@ -32,12 +33,14 @@ def entry_detail(table, index, url, code, probing):
     start = horner(url, table.capacity, trace)
     steps = "".join(f"<li>(31 × {old} + {ord(c)}) mod {table.capacity} = {new} [{escape(c)}]</li>"
                     for c, old, new in trace)
+    cost = ""
     path = str(start)
     if probing:
         count = (index - start) % table.capacity + 1
+        cost = f" · 탐지 {count}회"
         path = " → ".join(str((start + step) % table.capacity) for step in range(count))
     return (f'<details><summary>{escape(url)} · 코드 {code}</summary>{short_link(code)}'
-            f'<p>처음 칸 {start} · 방문 경로 {path} · 저장 칸 {index}</p>'
+            f'<p>처음 칸 {start} · 방문 경로 {path} · 저장 칸 {index}{cost}</p>'
             f'<details><summary>문자별 호너 계산</summary><ol>{steps}</ol></details></details>')
 
 
@@ -48,7 +51,7 @@ def table_page(app, probing):
         cells[index].append(entry_detail(table, index, key, value, probing))
     rows = []
     for index, items in enumerate(cells):
-        content = "빈칸" if probing else " → ".join(items + ["NULL"])
+        content = "빈칸" if probing else f"<strong>체인 길이 {len(items)}</strong> " + " → ".join(items + ["NULL"])
         if probing and items:
             content = items[0]
         rows.append(f'<tr><th scope="row">{index}</th><td>{content}</td></tr>')
@@ -112,10 +115,11 @@ def build_server(address, factory=HashTable, probing=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--table", choices=("chain",), default="chain")
+    parser.add_argument("--table", choices=("chain", "probe"), default="chain")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    with build_server(("0.0.0.0", args.port)) as server:
+    probing = args.table == "probe"
+    with build_server(("0.0.0.0", args.port), ProbingTable if probing else HashTable, probing) as server:
         print(f"Serving at http://localhost:{args.port} ({args.table})", flush=True)
         server.serve_forever()
 
